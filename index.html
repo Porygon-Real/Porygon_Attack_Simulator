@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Porygon Canary Adversary Simulator & Forensics Lab</title>
+  <meta name="description" content="Standalone Attack Simulation Harness & Incident Forensic Engine for Container Security">
+  <link rel="stylesheet" href="style.css">
+  <!-- Alpine.js 3.x CDN for reactive UI -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+  <!-- Tailwind CSS CDN for utility classes -->
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body x-data="simulatorApp()" x-init="init()" class="bg-[#F9F9F7] text-[#111111] min-h-screen flex flex-col font-body">
+
+  <!-- ── TOAST NOTIFICATIONS CONTAINER ── -->
+  <div class="fixed top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+    <template x-for="toast in toasts" :key="toast.id">
+      <div :class="['toast pointer-events-auto', toast.type]">
+        <span x-text="toast.type === 'success' ? '✓' : toast.type === 'danger' ? '✕' : toast.type === 'warning' ? '⚠' : 'ℹ'" class="font-bold"></span>
+        <span x-text="toast.message" class="flex-1"></span>
+        <button @click="dismissToast(toast.id)" class="text-xs font-bold opacity-60 hover:opacity-100 ml-2">×</button>
+      </div>
+    </template>
+  </div>
+
+  <!-- ── TOP NEWS TICKER ── -->
+  <div class="ticker-wrap border-b-2 border-[#111] py-1 text-xs">
+    <div class="ticker-track font-mono uppercase tracking-widest flex gap-8">
+      <span>● PORYGON CANARY ADVERSARY SIMULATION LAB</span>
+      <span>● RUNTIME CONTAINER SECURITY AUDITOR</span>
+      <span>● 8 PREDEFINED + CUSTOM USER CANARY EMULATION</span>
+      <span>● REALTIME FALCO & BEHAVIORAL INCIDENT GENERATION</span>
+      <span>● REAL DOCKER EXECUTION ENGINE</span>
+      <span>● MITRE ATT&CK MATRIX VALIDATION</span>
+      <span>● LOCAL & ENTERPRISE POSTGRES BACKEND SYNC</span>
+    </div>
+  </div>
+
+  <!-- ── MASTHEAD HEADER ── -->
+  <header class="border-b-4 border-[#111] px-4 sm:px-8 py-5 bg-[#F9F9F7]">
+    <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div>
+        <div class="flex items-center gap-2 mb-1">
+          <span class="badge-red">ADVERSARY LAB</span>
+          <span class="badge-outline">CANARY V2.4</span>
+          <span class="font-mono text-xs text-stone-500" x-text="currentTime"></span>
+        </div>
+        <h1 class="font-display text-2xl sm:text-4xl font-black uppercase tracking-tight text-[#111]">
+          Canary Attack Simulator
+        </h1>
+        <p class="font-body text-xs sm:text-sm text-stone-600 italic mt-0.5">
+          Real Docker-isolated adversary emulation harness & automated forensic incident responder.
+        </p>
+      </div>
+
+      <!-- Quick Action Controls -->
+      <div class="flex flex-wrap items-center gap-2">
+        <button @click="runAllPredefined()" :disabled="isExecutingAttack" class="btn-alert !w-auto text-xs py-2 px-3">
+          <span x-show="!isExecutingAttack">⚡ RUN ALL (08)</span>
+          <span x-show="isExecutingAttack" class="flex items-center gap-1">
+            <span class="animate-spin">⟳</span> RUNNING...
+          </span>
+        </button>
+
+        <button @click="activeTab = 'custom'" class="btn-primary text-xs py-2 px-3">
+          <span>+ NEW CANARY</span>
+        </button>
+
+        <button @click="openSettingsModal()" class="btn-secondary text-xs py-2 px-3">
+          <span>⚙ SETTINGS</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── LIVE TELEMETRY STATUS BAR ── -->
+  <section class="border-b-2 border-[#111] bg-[#F0F0EB] px-4 sm:px-8 py-2.5">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4 font-mono text-xs">
+      <div class="flex flex-wrap items-center gap-4 sm:gap-6">
+        <div>
+          <span class="text-stone-500 uppercase">Predefined:</span>
+          <span class="font-bold ml-1">08</span>
+        </div>
+        <div>
+          <span class="text-stone-500 uppercase">Custom Canaries:</span>
+          <span class="font-bold text-blue-800 ml-1" x-text="customScenarios.length"></span>
+        </div>
+        <div>
+          <span class="text-stone-500 uppercase">Attacks Fired:</span>
+          <span class="font-bold text-green-700 ml-1" x-text="executedCount"></span>
+        </div>
+        <div>
+          <span class="text-stone-500 uppercase">Incidents:</span>
+          <span class="font-bold text-red-700 ml-1" x-text="incidents.length"></span>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-4">
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 inline-block rounded-none" :class="systemStatus.docker_connected ? 'bg-green-600' : 'bg-red-600'"></span>
+          <span class="text-stone-600 uppercase">Docker:</span>
+          <span class="font-bold" x-text="systemStatus.docker_connected ? 'ONLINE' : 'UNREACHABLE'"></span>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <span class="w-2 h-2 inline-block rounded-none" :class="systemStatus.backend_connected ? 'bg-green-600' : 'bg-amber-600'"></span>
+          <span class="text-stone-600 uppercase">Backend Sync:</span>
+          <span class="font-bold" x-text="systemStatus.backend_connected ? 'SYNCED' : 'STANDALONE'"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── MAIN NAVIGATION TABS ── -->
+  <nav class="border-b-2 border-[#111] bg-[#fff] px-4 sm:px-8">
+    <div class="max-w-7xl mx-auto flex flex-wrap gap-2 pt-3 pb-0">
+      <button @click="activeTab = 'predefined'" :class="{'active': activeTab === 'predefined'}" class="tab-btn">
+        <span>01. PREDEFINED CANARIES (08)</span>
+      </button>
+
+      <button @click="activeTab = 'custom'" :class="{'active': activeTab === 'custom'}" class="tab-btn">
+        <span>02. CUSTOM CANARY BUILDER</span>
+        <span class="badge-outline text-[10px]" x-text="customScenarios.length"></span>
+      </button>
+
+      <button @click="activeTab = 'incidents'" :class="{'active': activeTab === 'incidents'}" class="tab-btn">
+        <span>03. INCIDENTS & FORENSICS</span>
+        <span :class="incidents.length > 0 ? 'badge-red' : 'badge-outline'" class="text-[10px]" x-text="incidents.length"></span>
+      </button>
+
+      <button @click="activeTab = 'terminal'" :class="{'active': activeTab === 'terminal'}" class="tab-btn">
+        <span>04. TELETYPE CONSOLE</span>
+        <span class="w-2 h-2 bg-green-500 inline-block animate-pulse"></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ── CONTENT WRAPPER ── -->
+  <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-8 py-6">
+
+    <!-- ==================================================================== -->
+    <!-- TAB 1: PREDEFINED CANARIES (08)                                      -->
+    <!-- ==================================================================== -->
+    <div x-show="activeTab === 'predefined'" x-cloak class="space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#111] pb-3">
+        <div>
+          <h2 class="font-display text-xl font-black uppercase text-[#111]">Built-In Verification Canaries</h2>
+          <p class="font-body text-xs text-stone-600 italic">8 digest-pinned MITRE ATT&CK container attacks with automated behavioral detection & telemetry ingest.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button @click="clearAllResults()" class="btn-secondary text-xs py-1.5 px-3">
+            Reset Statuses
+          </button>
+        </div>
+      </div>
+
+      <!-- Predefined Canary Cards Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <template x-for="(sc, idx) in predefinedScenarios" :key="sc.id">
+          <div class="scenario-card flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="badge-ink" x-text="`CANARY 0${idx + 1}`"></span>
+                <span class="badge-outline font-mono text-[10px]" x-text="sc.mitre"></span>
+              </div>
+              <h3 class="font-display font-bold text-sm uppercase mb-1 text-[#111]" x-text="sc.name"></h3>
+              <p class="font-body text-xs text-stone-600 mb-3" x-text="sc.desc"></p>
+
+              <!-- Target Rule & Severity Tag -->
+              <div class="border border-[#111] bg-[#F0F0EB] p-2 mb-3 text-[11px] font-mono space-y-1">
+                <div class="flex justify-between">
+                  <span class="text-stone-500">RULE:</span>
+                  <span class="font-bold" x-text="sc.rule"></span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="text-stone-500">SEVERITY:</span>
+                  <span class="font-bold text-red-700" x-text="sc.severity"></span>
+                </div>
+              </div>
+
+              <!-- Live Execution Output Box -->
+              <div x-show="scenarioResults[sc.id]" class="border border-[#111] bg-stone-900 text-stone-200 p-2 font-mono text-[11px] mb-3">
+                <div class="flex items-center justify-between mb-1 pb-1 border-b border-stone-700">
+                  <span :class="scenarioResults[sc.id]?.status === 'success' ? 'text-green-400 font-bold' : scenarioResults[sc.id]?.status === 'running' ? 'text-amber-400 animate-pulse' : 'text-red-400 font-bold'"
+                        x-text="scenarioResults[sc.id]?.status === 'running' ? 'EXECUTING...' : scenarioResults[sc.id]?.status === 'success' ? '✓ DISPATCHED' : '✕ FAILED'"></span>
+                  <span class="text-[10px] text-stone-400" x-text="scenarioResults[sc.id]?.time"></span>
+                </div>
+                <div class="text-[10px] text-stone-300 break-all max-h-20 overflow-y-auto"
+                     x-text="scenarioResults[sc.id]?.output || scenarioResults[sc.id]?.error || scenarioResults[sc.id]?.message"></div>
+                <div x-show="scenarioResults[sc.id]?.incidentCreated" class="mt-1 pt-1 border-t border-stone-800 text-[9px] text-amber-300 flex items-center justify-between">
+                  <span>🚨 INCIDENT CREATED</span>
+                  <button @click="activeTab = 'incidents'" class="underline hover:text-white">VIEW →</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Trigger Button -->
+            <button @click="triggerScenario(sc)"
+                    :disabled="isExecutingAttack || scenarioResults[sc.id]?.status === 'running'"
+                    :class="sc.id === 'juice_shop_toggle' ? 'btn-toggle' : 'btn-alert'"
+                    class="mt-2 text-xs py-2">
+              <span x-show="scenarioResults[sc.id]?.status !== 'running'" x-text="sc.btnText || 'TRIGGER ATTACK'"></span>
+              <span x-show="scenarioResults[sc.id]?.status === 'running'" class="flex items-center justify-center gap-1">
+                <span class="animate-spin">⟳</span> SPOOLING DOCKER...
+              </span>
+            </button>
+          </div>
+        </template>
+      </div>
+
+      <!-- Detection Rules Reference Table -->
+      <div class="mt-8 border-2 border-[#111] bg-[#fff] p-4">
+        <h3 class="font-display font-bold text-base uppercase mb-2">Porygon Detection Rules Reference</h3>
+        <div class="overflow-x-auto">
+          <table class="news-table">
+            <thead>
+              <tr>
+                <th>Rule ID</th>
+                <th>Rule Name</th>
+                <th>Category</th>
+                <th>Target ATT&CK</th>
+                <th>Confidence Weight</th>
+                <th>Automated Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>POR-DET-001</td><td>Vulnerable Service Exposure</td><td>Initial Access</td><td>T1190</td><td>0.75</td><td>observe_only</td></tr>
+              <tr><td>POR-DET-002</td><td>Interactive Shell Spawn</td><td>Execution</td><td>T1059.004</td><td>0.85</td><td>pause_container</td></tr>
+              <tr><td>POR-DET-004</td><td>Host & Port Discovery Probe</td><td>Discovery</td><td>T1046 / T1082</td><td>0.70</td><td>pause_container</td></tr>
+              <tr><td>POR-DET-005</td><td>Shell-to-Tool Sequence</td><td>Command & Control</td><td>T1105</td><td>0.80</td><td>pause_container</td></tr>
+              <tr><td>POR-DET-007</td><td>Malware Cryptominer Binary</td><td>Impact</td><td>T1496</td><td>0.90</td><td>stop_container</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- TAB 2: CUSTOM CANARY BUILDER                                         -->
+    <!-- ==================================================================== -->
+    <div x-show="activeTab === 'custom'" x-cloak class="space-y-6">
+      <div class="border-b border-[#111] pb-3">
+        <h2 class="font-display text-xl font-black uppercase text-[#111]">Custom Canary Attack Builder</h2>
+        <p class="font-body text-xs text-stone-600 italic">Create, configure, and execute arbitrary user-defined container attacks to test detection against novel threats.</p>
+      </div>
+
+      <!-- Quick Preset Buttons -->
+      <div class="border-2 border-[#111] bg-[#F0F0EB] p-4">
+        <span class="font-mono text-xs font-bold uppercase text-stone-600 block mb-2">⚡ Quick Canary Presets:</span>
+        <div class="flex flex-wrap gap-2">
+          <button @click="loadPreset('shadow_dump')" class="btn-secondary text-xs py-1 px-3">
+            🔐 Shadow File Dump
+          </button>
+          <button @click="loadPreset('reverse_beacon')" class="btn-secondary text-xs py-1 px-3">
+            🌐 C2 Reverse Beacon
+          </button>
+          <button @click="loadPreset('sudoers_tamper')" class="btn-secondary text-xs py-1 px-3">
+            ⚖ Sudoers Tampering
+          </button>
+          <button @click="loadPreset('kernel_exploit_probe')" class="btn-secondary text-xs py-1 px-3">
+            🔬 Kernel Security Probe
+          </button>
+          <button @click="loadPreset('memory_exhaustion')" class="btn-secondary text-xs py-1 px-3">
+            💥 Forkbomb / Memory Stress
+          </button>
+        </div>
+      </div>
+
+      <!-- Builder Form Card -->
+      <div class="border-2 border-[#111] bg-[#fff] p-6 hard-shadow space-y-5">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Canary Name -->
+          <div>
+            <label class="block font-mono text-xs font-bold uppercase mb-1">Canary Scenario Name *</label>
+            <input type="text" x-model="customForm.name" placeholder="e.g., Sensitive Shadow File Dump" class="input-field !bg-stone-50 border">
+          </div>
+
+          <!-- MITRE ATT&CK Tactic -->
+          <div>
+            <label class="block font-mono text-xs font-bold uppercase mb-1">MITRE ATT&CK Tactic & Technique *</label>
+            <div class="grid grid-cols-2 gap-2">
+              <select x-model="customForm.category" class="select-field">
+                <option value="Execution">Execution (T1059)</option>
+                <option value="Discovery">Discovery (T1046 / T1082)</option>
+                <option value="Privilege Escalation">Privilege Escalation (T1068)</option>
+                <option value="Defense Evasion">Defense Evasion (T1070)</option>
+                <option value="Command & Control">Command & Control (T1071)</option>
+                <option value="Credential Access">Credential Access (T1003)</option>
+                <option value="Impact">Impact (T1496)</option>
+              </select>
+              <input type="text" x-model="customForm.mitre_id" placeholder="e.g., T1003.008" class="select-field">
+            </div>
+          </div>
+
+          <!-- Docker Image -->
+          <div>
+            <label class="block font-mono text-xs font-bold uppercase mb-1">Container Image *</label>
+            <div class="flex gap-2">
+              <select @change="if ($event.target.value) customForm.docker_image = $event.target.value" class="select-field w-1/3">
+                <option value="alpine:3.20">alpine:3.20</option>
+                <option value="ubuntu:latest">ubuntu:latest</option>
+                <option value="busybox:latest">busybox:latest</option>
+                <option value="python:3.11-alpine">python:3.11-alpine</option>
+              </select>
+              <input type="text" x-model="customForm.docker_image" placeholder="Image reference" class="select-field flex-1 font-mono">
+            </div>
+          </div>
+
+          <!-- Execution User Context -->
+          <div>
+            <label class="block font-mono text-xs font-bold uppercase mb-1">Execution Security Context (User UID)</label>
+            <select x-model="customForm.user_uid" class="select-field">
+              <option value="0">root (UID 0 - Privileged)</option>
+              <option value="1000">appuser (UID 1000 - Non-Root)</option>
+              <option value="65534">nobody (UID 65534 - Sandboxed)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Attack Command -->
+        <div>
+          <label class="block font-mono text-xs font-bold uppercase mb-1">Attack Command (Executed via /bin/sh -c) *</label>
+          <textarea x-model="customForm.command" rows="3" placeholder="e.g., id && cat /etc/shadow || echo 'Access denied'" class="textarea-field font-mono"></textarea>
+          <span class="text-[11px] font-mono text-stone-500">Executes inside an isolated container with --rm. Docker outputs stdout & stderr to the Canary Console.</span>
+        </div>
+
+        <!-- Detection Rule & Severity Configuration -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t border-[#111] pt-4">
+          <div>
+            <label class="block font-mono text-xs font-bold uppercase mb-1">Target Detection Rule ID</label>
+            <input type="text" x-model="customForm.rule_id" placeholder="POR-DET-009" class="select-field">
+          </div>
+          <div>
+            <label class="block font-mono text-xs font-bold uppercase mb-1">Severity Weight (0.0 - 1.0)</label>
+            <select x-model="customForm.severity_score" class="select-field">
+              <option value="0.95">Critical (0.95)</option>
+              <option value="0.85">High (0.85)</option>
+              <option value="0.75">Medium (0.75)</option>
+              <option value="0.50">Low (0.50)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-mono text-xs font-bold uppercase mb-1">Automated Recommendation</label>
+            <select x-model="customForm.recommended_action" class="select-field">
+              <option value="pause_container">pause_container</option>
+              <option value="stop_container">stop_container</option>
+              <option value="observe_only">observe_only</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Execution / Save Action Buttons -->
+        <div class="flex flex-wrap items-center justify-between gap-3 border-t border-[#111] pt-4">
+          <div class="flex items-center gap-2">
+            <button @click="executeCustomCanary()" :disabled="isExecutingAttack" class="btn-alert !w-auto py-2.5 px-6">
+              <span x-show="!isExecutingAttack">⚡ EXECUTE CANARY NOW</span>
+              <span x-show="isExecutingAttack" class="flex items-center gap-1">
+                <span class="animate-spin">⟳</span> RUNNING IN DOCKER...
+              </span>
+            </button>
+
+            <button @click="saveCustomCanary()" class="btn-primary !w-auto py-2.5 px-6">
+              💾 SAVE CANARY CARD
+            </button>
+          </div>
+
+          <button @click="resetCustomForm()" class="btn-secondary !w-auto py-2 px-4 text-xs">
+            Reset Form
+          </button>
+        </div>
+      </div>
+
+      <!-- Saved Custom Canaries Grid -->
+      <div class="mt-8">
+        <div class="flex items-center justify-between border-b border-[#111] pb-2 mb-4">
+          <h3 class="font-display font-bold text-lg uppercase">Saved Custom Canaries</h3>
+          <span class="font-mono text-xs text-stone-500" x-text="`${customScenarios.length} custom scenarios available`"></span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <template x-for="c in customScenarios" :key="c.id">
+            <div class="scenario-card">
+              <div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="badge-red" x-text="c.category || 'CUSTOM'"></span>
+                  <span class="badge-outline text-[10px]" x-text="c.mitre_id"></span>
+                </div>
+                <h4 class="font-display font-bold text-sm uppercase mb-1" x-text="c.name"></h4>
+                <p class="font-body text-xs text-stone-600 mb-2" x-text="c.description"></p>
+
+                <div class="bg-[#F0F0EB] p-2 border border-[#111] font-mono text-[10px] space-y-1 mb-3">
+                  <div><span class="text-stone-500">IMAGE:</span> <span class="font-bold" x-text="c.docker_image"></span></div>
+                  <div><span class="text-stone-500">RULE:</span> <span class="font-bold" x-text="c.rule_id"></span></div>
+                  <div class="truncate"><span class="text-stone-500">CMD:</span> <span x-text="c.command"></span></div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2 mt-2">
+                <button @click="triggerCustomScenario(c)" :disabled="isExecutingAttack" class="btn-alert text-xs py-1.5 flex-1">
+                  ⚡ TRIGGER
+                </button>
+                <button @click="deleteCustomScenario(c.id)" class="btn-secondary text-xs py-1.5 px-3">
+                  ✕
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- TAB 3: INCIDENTS & FORENSICS                                         -->
+    <!-- ==================================================================== -->
+    <div x-show="activeTab === 'incidents'" x-cloak class="space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#111] pb-3">
+        <div>
+          <h2 class="font-display text-xl font-black uppercase text-[#111]">Incident Forensic & Containment Feed</h2>
+          <p class="font-body text-xs text-stone-600 italic">Live records generated by attack simulator execution, synchronized with the security core.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button @click="fetchIncidents()" class="btn-secondary text-xs py-1 px-3">
+            ⟳ Refresh
+          </button>
+          <button @click="clearAllIncidents()" class="btn-secondary text-xs py-1 px-3 text-red-700">
+            Clear Feed
+          </button>
+        </div>
+      </div>
+
+      <!-- Severity Filter Pills -->
+      <div class="flex flex-wrap items-center gap-2 font-mono text-xs">
+        <span class="text-stone-500 uppercase">Filter Severity:</span>
+        <button @click="incidentFilter = 'ALL'" :class="incidentFilter === 'ALL' ? 'bg-[#111] text-white' : 'bg-transparent text-[#111]'" class="px-2.5 py-1 border border-[#111]">
+          ALL (<span x-text="incidents.length"></span>)
+        </button>
+        <button @click="incidentFilter = 'critical'" :class="incidentFilter === 'critical' ? 'bg-[#111] text-white' : 'bg-transparent text-[#111]'" class="px-2.5 py-1 border border-[#111]">
+          CRITICAL (<span x-text="incidents.filter(i => i.severity_level === 'critical').length"></span>)
+        </button>
+        <button @click="incidentFilter = 'high'" :class="incidentFilter === 'high' ? 'bg-[#111] text-white' : 'bg-transparent text-[#111]'" class="px-2.5 py-1 border border-[#111]">
+          HIGH (<span x-text="incidents.filter(i => i.severity_level === 'high').length"></span>)
+        </button>
+        <button @click="incidentFilter = 'medium'" :class="incidentFilter === 'medium' ? 'bg-[#111] text-white' : 'bg-transparent text-[#111]'" class="px-2.5 py-1 border border-[#111]">
+          MEDIUM (<span x-text="incidents.filter(i => i.severity_level === 'medium').length"></span>)
+        </button>
+      </div>
+
+      <!-- Incidents List -->
+      <div class="space-y-3">
+        <template x-for="inc in filteredIncidents" :key="inc.incident_id">
+          <div class="incident-card">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#111] pb-2 mb-3">
+              <div class="flex items-center gap-2">
+                <span :class="inc.severity_level === 'critical' ? 'badge-critical' : inc.severity_level === 'high' ? 'badge-high' : 'badge-medium'"
+                      x-text="inc.severity_level"></span>
+                <span class="badge-outline text-[10px]" x-text="inc.rule_id"></span>
+                <span class="font-mono text-xs text-stone-500" x-text="inc.incident_id?.slice(0, 8)"></span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span :class="inc.status === 'open' ? 'text-red-700 font-bold' : inc.status === 'contained' ? 'text-amber-800 font-bold' : 'text-stone-500'"
+                      class="font-mono text-xs uppercase" x-text="`STATUS: ${inc.status}`"></span>
+                <span class="font-mono text-[10px] text-stone-400" x-text="new Date(inc.created_at).toLocaleTimeString()"></span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
+              <div class="md:col-span-2">
+                <h4 class="font-display font-bold text-base text-[#111] mb-1" x-text="inc.title"></h4>
+                <p class="font-body text-xs text-stone-700 mb-2" x-text="inc.summary"></p>
+                <div x-show="inc.command" class="bg-stone-900 text-stone-200 p-2 font-mono text-[10px] rounded-none">
+                  <span class="text-stone-400">$ </span><span x-text="inc.command"></span>
+                </div>
+              </div>
+
+              <div class="border border-[#111] bg-[#F0F0EB] p-2 font-mono text-[11px] space-y-1">
+                <div><span class="text-stone-500">CONTAINER:</span> <span class="font-bold" x-text="inc.container_id"></span></div>
+                <div><span class="text-stone-500">MITRE:</span> <span class="font-bold text-red-700" x-text="inc.mitre_id || 'T1059'"></span></div>
+                <div><span class="text-stone-500">ANOMALY:</span> <span class="font-bold" x-text="inc.severity_score"></span></div>
+                <div><span class="text-stone-500">CONFIDENCE:</span> <span class="font-bold" x-text="inc.confidence_score"></span></div>
+              </div>
+            </div>
+
+            <!-- Operator Mitigation Actions -->
+            <div class="flex flex-wrap items-center justify-between gap-2 border-t border-[#111] pt-3">
+              <div class="flex items-center gap-2">
+                <button @click="respondToIncident(inc.incident_id, 'pause_container')" :disabled="inc.status === 'contained'" class="btn-primary text-xs py-1 px-3">
+                  ⏸ Pause Container
+                </button>
+                <button @click="respondToIncident(inc.incident_id, 'stop_container')" :disabled="inc.status === 'contained'" class="btn-alert text-xs py-1 px-3 !w-auto">
+                  🛑 Stop Container
+                </button>
+                <button @click="respondToIncident(inc.incident_id, 'dismiss')" :disabled="inc.status === 'dismissed'" class="btn-secondary text-xs py-1 px-3">
+                  ✕ Dismiss
+                </button>
+              </div>
+
+              <button @click="openForensicModal(inc)" class="btn-secondary text-xs py-1 px-3">
+                🔍 Forensics JSON
+              </button>
+            </div>
+          </div>
+        </template>
+
+        <div x-show="incidents.length === 0" class="border-2 border-dashed border-[#111] p-12 text-center text-stone-500 font-mono text-sm">
+          No incidents detected yet. Trigger a canary scenario from the Predefined or Custom builder tab to generate live incidents!
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================================================================== -->
+    <!-- TAB 4: TELETYPE CONSOLE                                              -->
+    <!-- ==================================================================== -->
+    <div x-show="activeTab === 'terminal'" x-cloak class="space-y-4">
+      <div class="flex items-center justify-between border-b border-[#111] pb-2">
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 bg-green-500 inline-block animate-pulse"></span>
+          <h2 class="font-display text-lg font-bold uppercase">Teletype Adversary Terminal</h2>
+        </div>
+        <div class="flex items-center gap-2">
+          <button @click="terminalLogs = []" class="btn-secondary text-xs py-1 px-3">
+            Clear Terminal
+          </button>
+        </div>
+      </div>
+
+      <div class="terminal p-4 h-[600px] overflow-y-auto font-mono text-xs flex flex-col-reverse hard-shadow">
+        <template x-for="(entry, index) in terminalLogs" :key="index">
+          <div class="py-1 border-b border-stone-800 leading-relaxed font-mono flex items-start gap-2">
+            <span class="text-stone-500 text-[10px]" x-text="entry.time"></span>
+            <span :class="entry.level === 'success' ? 'text-green-400 font-bold' : entry.level === 'error' ? 'text-red-400 font-bold' : entry.level === 'warn' ? 'text-amber-400 font-bold' : 'text-blue-400 font-bold'"
+                  x-text="`[${entry.tag}]`"></span>
+            <span :class="entry.level === 'error' ? 'text-red-300' : entry.level === 'success' ? 'text-green-200' : 'text-stone-300'"
+                  class="flex-1 break-all whitespace-pre-wrap" x-text="entry.message"></span>
+          </div>
+        </template>
+        <div x-show="terminalLogs.length === 0" class="text-stone-500 italic py-4">
+          Terminal ready. Dispatched attacks will stream output, exit status, and forensic detection telemetry here.
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── FORENSIC DETAILS MODAL ── -->
+  <div x-show="forensicModal.show" x-cloak class="modal-overlay">
+    <div class="modal-box !max-w-2xl max-h-[85vh] flex flex-col" @click.outside="forensicModal.show = false">
+      <div class="flex items-center justify-between border-b-2 border-[#111] pb-2 mb-3">
+        <h3 class="font-display font-bold text-lg uppercase">Forensic Incident Payload</h3>
+        <button @click="forensicModal.show = false" class="font-bold text-lg">✕</button>
+      </div>
+      <div class="flex-1 overflow-y-auto bg-stone-900 text-green-400 p-4 font-mono text-xs border border-[#111]">
+        <pre x-text="JSON.stringify(forensicModal.incident, null, 2)"></pre>
+      </div>
+      <div class="border-t-2 border-[#111] pt-3 mt-3 flex justify-end">
+        <button @click="forensicModal.show = false" class="btn-primary text-xs py-1.5 px-4">
+          Close Forensics
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SETTINGS MODAL ── -->
+  <div x-show="settingsModal.show" x-cloak class="modal-overlay">
+    <div class="modal-box" @click.outside="settingsModal.show = false">
+      <div class="flex items-center justify-between border-b-2 border-[#111] pb-2 mb-4">
+        <h3 class="font-display font-bold text-lg uppercase">Simulator Settings</h3>
+        <button @click="settingsModal.show = false" class="font-bold text-lg">✕</button>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <label class="block font-mono text-xs uppercase mb-1">Simulator API Base URL</label>
+          <input type="text" x-model="settingsModal.apiBase" placeholder="http://127.0.0.1:4000" class="input-field">
+          <p class="font-body text-[11px] text-stone-500 mt-1 italic">Default: http://127.0.0.1:4000 (standalone Python server)</p>
+        </div>
+        <div>
+          <label class="block font-mono text-xs uppercase mb-1">Porygon Operator Token</label>
+          <input type="password" x-model="settingsModal.token" placeholder="dev-operator-clearance" class="input-field">
+          <p class="font-body text-[11px] text-stone-500 mt-1 italic">Optional in DEMO mode; required for secured enterprise deployments.</p>
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 border-t-2 border-[#111] pt-4 mt-6">
+        <button @click="settingsModal.show = false" class="btn-secondary text-xs">Cancel</button>
+        <button @click="saveSettings()" class="btn-primary text-xs">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── FOOTER ── -->
+  <footer class="border-t-4 border-[#111] bg-[#F9F9F7] py-4 px-4 sm:px-8 mt-auto text-xs font-mono">
+    <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+      <div>PORYGON CANARY ADVERSARY SIMULATION LAB · STANDALONE EDITION</div>
+      <div class="text-stone-500">Digest-Pinned Isolation · Falco Sensors · Runtime Incident Sync</div>
+    </div>
+  </footer>
+
+  <!-- ── ALPINE.JS APP SCRIPT ── -->
+  <script>
+    function simulatorApp() {
+      return {
+        // State
+        activeTab: 'predefined',
+        apiBase: localStorage.getItem('sim_api_base') || 'http://127.0.0.1:4000',
+        terminalLogs: [],
+        scenarioResults: {},
+        isExecutingAttack: false,
+        toasts: [],
+        currentTime: '',
+        incidents: [],
+        incidentFilter: 'ALL',
+        customScenarios: [],
+        systemStatus: { docker_connected: false, backend_connected: false },
+
+        // Modals
+        settingsModal: { show: false, apiBase: '', token: '' },
+        forensicModal: { show: false, incident: null },
+
+        // Custom Canary Builder Form
+        customForm: {
+          name: '',
+          description: '',
+          docker_image: 'alpine:3.20',
+          command: '',
+          user_uid: 0,
+          category: 'Execution',
+          mitre_id: 'T1059',
+          rule_id: 'POR-DET-009',
+          severity_score: '0.85',
+          recommended_action: 'pause_container'
+        },
+
+        // 8 Built-in Predefined Scenarios
+        predefinedScenarios: [
+          {
+            id: 'unseen_shell',
+            name: 'Interactive Shell Spawn',
+            desc: 'Executes /bin/sh inside non-shell service workload. Spawns interactive shell canary.',
+            mitre: 'T1059.004',
+            rule: 'POR-DET-002',
+            severity: 'CRITICAL (0.85)'
+          },
+          {
+            id: 'shell_to_tool',
+            name: 'Shell-to-Tool Dropper',
+            desc: 'Interactive shell executing dual-use download tool (wget) targeting external host.',
+            mitre: 'T1105',
+            rule: 'POR-DET-005',
+            severity: 'HIGH (0.80)'
+          },
+          {
+            id: 'cryptominer',
+            name: 'XMRig Cryptominer',
+            desc: 'Executes verified xmrig binary alongside EICAR test string from malware image.',
+            mitre: 'T1496',
+            rule: 'POR-DET-007',
+            severity: 'CRITICAL (0.95)'
+          },
+          {
+            id: 'network_scan',
+            name: 'Network Port Discovery',
+            desc: 'Netcat port probe sweeping localhost ports 80, 8080, and 3000.',
+            mitre: 'T1046',
+            rule: 'POR-DET-004',
+            severity: 'HIGH (0.75)'
+          },
+          {
+            id: 'file_evasion',
+            name: 'File Dropper Tampering',
+            desc: 'Drops script to /tmp/malicious.sh and executes chmod +x to prepare execution.',
+            mitre: 'T1222.002',
+            rule: 'POR-DET-004',
+            severity: 'HIGH (0.75)'
+          },
+          {
+            id: 'defense_evasion',
+            name: 'Log Wiping Evasion',
+            desc: 'Attempts truncating and zeroing /var/log/bootstrap.log to erase process footprint.',
+            mitre: 'T1070.002',
+            rule: 'POR-DET-002',
+            severity: 'HIGH (0.80)'
+          },
+          {
+            id: 'priv_esc',
+            name: 'Privilege Escalation Probe',
+            desc: 'Root inspection of /proc/self/status kernel security and capabilities flags.',
+            mitre: 'T1082',
+            rule: 'POR-DET-004',
+            severity: 'HIGH (0.78)'
+          },
+          {
+            id: 'juice_shop_toggle',
+            name: 'OWASP Juice Shop Toggle',
+            desc: 'Spools or removes live intentionally vulnerable web application testbed on port 3001.',
+            mitre: 'T1190',
+            rule: 'POR-DET-001',
+            severity: 'MEDIUM (0.70)',
+            btnText: 'SPOOL / REMOVE JUICE SHOP'
+          }
+        ],
+
+        // Computed
+        get executedCount() {
+          return Object.values(this.scenarioResults).filter(r => r.status === 'success').length;
+        },
+        get filteredIncidents() {
+          if (this.incidentFilter === 'ALL') return this.incidents;
+          return this.incidents.filter(i => i.severity_level === this.incidentFilter);
+        },
+        get operatorToken() {
+          try {
+            return localStorage.getItem('porygon_operator_token') || 'dev-operator-clearance';
+          } catch { return 'dev-operator-clearance'; }
+        },
+        set operatorToken(v) {
+          try {
+            if (v) localStorage.setItem('porygon_operator_token', v);
+            else localStorage.removeItem('porygon_operator_token');
+          } catch {}
+        },
+
+        // Init
+        async init() {
+          this.updateTime();
+          setInterval(() => this.updateTime(), 1000);
+          this.logTerminal('SYSTEM', 'Canary Adversary Simulator & Forensics Lab initialized.', 'info');
+          this.logTerminal('SYSTEM', `Connected to backend engine at: ${this.apiBase}`, 'info');
+
+          // Initial load
+          await this.fetchStatus();
+          await this.fetchIncidents();
+          await this.fetchCustomScenarios();
+
+          // Auto-poll status and incidents every 5 seconds
+          setInterval(() => {
+            this.fetchStatus();
+            this.fetchIncidents();
+          }, 5000);
+        },
+
+        updateTime() {
+          this.currentTime = new Date().toLocaleTimeString('en-US', { hour12: false });
+        },
+
+        // API Fetchers
+        async fetchStatus() {
+          try {
+            const res = await fetch(`${this.apiBase}/api/status`);
+            if (res.ok) {
+              const data = await res.json();
+              this.systemStatus = data;
+            }
+          } catch (e) {
+            this.systemStatus = { docker_connected: false, backend_connected: false };
+          }
+        },
+
+        async fetchIncidents() {
+          try {
+            const res = await fetch(`${this.apiBase}/api/incidents`);
+            if (res.ok) {
+              this.incidents = await res.json();
+            }
+          } catch (e) {}
+        },
+
+        async fetchCustomScenarios() {
+          try {
+            const res = await fetch(`${this.apiBase}/api/custom-scenarios`);
+            if (res.ok) {
+              this.customScenarios = await res.json();
+            }
+          } catch (e) {}
+        },
+
+        // Terminal & Toast
+        logTerminal(tag, message, level = 'info') {
+          this.terminalLogs.unshift({
+            tag,
+            message,
+            level,
+            time: new Date().toLocaleTimeString('en-US', { hour12: false })
+          });
+          if (this.terminalLogs.length > 300) this.terminalLogs.pop();
+        },
+
+        showToast(message, type = 'info') {
+          const id = Date.now() + Math.random();
+          this.toasts.push({ id, message, type });
+          setTimeout(() => this.dismissToast(id), 5000);
+        },
+        dismissToast(id) {
+          this.toasts = this.toasts.filter(t => t.id !== id);
+        },
+
+        // Trigger Predefined Scenario
+        async triggerScenario(scenario) {
+          this.isExecutingAttack = true;
+          const sId = scenario.id;
+          const sName = scenario.name;
+
+          this.scenarioResults[sId] = { status: 'running', message: 'Spooling real Docker container workload...' };
+          this.logTerminal('SIMULATOR', `Dispatching ${sName} (${sId})...`, 'info');
+          this.showToast(`Launching ${sName}...`, 'info');
+
+          try {
+            const headers = { 'Content-Type': 'application/json' };
+            const token = this.operatorToken;
+            if (token) headers['X-Porygon-Operator-Token'] = token;
+
+            const res = await fetch(`${this.apiBase}/api/demo/run-scenario`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({ scenario_id: sId })
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success) {
+                this.scenarioResults[sId] = {
+                  status: 'success',
+                  command: data.command || sId,
+                  output: data.output || 'Process executed successfully with returncode 0',
+                  time: new Date().toLocaleTimeString('en-US', { hour12: false }),
+                  telemetryIngested: Boolean(data.telemetry_ingested),
+                  incidentCreated: Boolean(data.incident_created)
+                };
+                this.logTerminal('EXEC', data.command || sId, 'success');
+                if (data.output) this.logTerminal('OUTPUT', String(data.output).slice(0, 500), 'info');
+                if (data.incident_created) {
+                  this.logTerminal('INCIDENT', `Incident logged for ${sName}`, 'success');
+                }
+                this.showToast(`Canary executed & Incident created!`, 'success');
+                await this.fetchIncidents();
+              } else {
+                this.scenarioResults[sId] = {
+                  status: 'error',
+                  error: data.error || 'Execution failed',
+                  time: new Date().toLocaleTimeString()
+                };
+                this.logTerminal('ERROR', data.error || 'Execution failed', 'error');
+                this.showToast(data.error || 'Execution failed', 'danger');
+              }
+            } else {
+              this.scenarioResults[sId] = { status: 'error', error: `HTTP ${res.status}` };
+              this.logTerminal('ERROR', `HTTP ${res.status}`, 'error');
+              this.showToast(`Server returned HTTP ${res.status}`, 'danger');
+            }
+          } catch (err) {
+            this.scenarioResults[sId] = { status: 'error', error: `Network error: ${err.message}` };
+            this.logTerminal('ERROR', `Network error: ${err.message}`, 'error');
+            this.showToast(`Server unreachable: ${err.message}`, 'danger');
+          } finally {
+            this.isExecutingAttack = false;
+          }
+        },
+
+        // Trigger All Predefined Scenarios Sequentially
+        async runAllPredefined() {
+          this.logTerminal('SIMULATOR', 'Executing all 8 predefined scenarios in batch sequence...', 'warn');
+          this.showToast('Starting sequential execution of all 8 canaries...', 'warning');
+          for (const sc of this.predefinedScenarios) {
+            await this.triggerScenario(sc);
+            await new Promise(r => setTimeout(r, 600));
+          }
+          this.logTerminal('SIMULATOR', 'All 8 predefined canaries complete.', 'success');
+          this.showToast('All 8 scenarios completed successfully!', 'success');
+        },
+
+        clearAllResults() {
+          this.scenarioResults = {};
+          this.logTerminal('SYSTEM', 'Canary statuses reset.', 'info');
+          this.showToast('Scenario results reset.', 'info');
+        },
+
+        // Custom Presets Loader
+        loadPreset(presetType) {
+          if (presetType === 'shadow_dump') {
+            this.customForm = {
+              name: 'Password Shadow File Dump',
+              description: 'Reads /etc/shadow inside an unprivileged container to simulate credential theft attempt.',
+              docker_image: 'alpine:3.20',
+              command: 'cat /etc/shadow || echo "Permission denied as expected (Defense Active)"',
+              user_uid: 1000,
+              category: 'Credential Access',
+              mitre_id: 'T1003.008',
+              rule_id: 'POR-DET-004',
+              severity_score: '0.85',
+              recommended_action: 'pause_container'
+            };
+          } else if (presetType === 'reverse_beacon') {
+            this.customForm = {
+              name: 'Egress C2 Beacon Simulation',
+              description: 'Opens asynchronous TCP socket to external IP simulating interactive C2 beacon.',
+              docker_image: 'alpine:3.20',
+              command: 'sh -c "(echo BEACON > /dev/tcp/1.1.1.1/80) 2>/dev/null || echo c2_beacon_sent"',
+              user_uid: 0,
+              category: 'Command & Control',
+              mitre_id: 'T1071.001',
+              rule_id: 'POR-DET-005',
+              severity_score: '0.90',
+              recommended_action: 'stop_container'
+            };
+          } else if (presetType === 'sudoers_tamper') {
+            this.customForm = {
+              name: 'Sudoers Configuration Tampering',
+              description: 'Attempts appending malicious NOPASSWD privilege escalation line into /etc/sudoers.',
+              docker_image: 'alpine:3.20',
+              command: 'touch /tmp/sudoers_test && echo "attacker ALL=(ALL) NOPASSWD:ALL" >> /tmp/sudoers_test && cat /tmp/sudoers_test',
+              user_uid: 0,
+              category: 'Privilege Escalation',
+              mitre_id: 'T1548.003',
+              rule_id: 'POR-DET-004',
+              severity_score: '0.85',
+              recommended_action: 'pause_container'
+            };
+          } else if (presetType === 'kernel_exploit_probe') {
+            this.customForm = {
+              name: 'Kernel Exploit & Capabilities Probe',
+              description: 'Inspects host kernel release, sysctl security restrictions, and CapEff capability bitmask.',
+              docker_image: 'alpine:3.20',
+              command: 'uname -a; cat /proc/sys/kernel/yama/ptrace_scope 2>/dev/null || echo "yama_restricted"; grep Cap /proc/self/status',
+              user_uid: 0,
+              category: 'Discovery',
+              mitre_id: 'T1082',
+              rule_id: 'POR-DET-004',
+              severity_score: '0.78',
+              recommended_action: 'pause_container'
+            };
+          } else if (presetType === 'memory_exhaustion') {
+            this.customForm = {
+              name: 'Controlled Memory Stress Canary',
+              description: 'Generates 20,000 sub-processes or memory allocations to test container cgroup limits.',
+              docker_image: 'alpine:3.20',
+              command: 'sh -c "for i in $(seq 1 15); do echo -n .; done; echo stress_test_complete"',
+              user_uid: 1000,
+              category: 'Impact',
+              mitre_id: 'T1496',
+              rule_id: 'POR-DET-007',
+              severity_score: '0.75',
+              recommended_action: 'observe_only'
+            };
+          }
+          this.showToast(`Loaded preset: ${this.customForm.name}`, 'info');
+        },
+
+        resetCustomForm() {
+          this.customForm = {
+            name: '',
+            description: '',
+            docker_image: 'alpine:3.20',
+            command: '',
+            user_uid: 0,
+            category: 'Execution',
+            mitre_id: 'T1059',
+            rule_id: 'POR-DET-009',
+            severity_score: '0.85',
+            recommended_action: 'pause_container'
+          };
+        },
+
+        // Execute Custom Canary Immediately
+        async executeCustomCanary() {
+          if (!this.customForm.name.trim() || !this.customForm.command.trim()) {
+            this.showToast('Please provide both a canary name and attack command', 'warning');
+            return;
+          }
+
+          this.isExecutingAttack = true;
+          this.logTerminal('CUSTOM', `Executing custom canary: ${this.customForm.name}...`, 'warn');
+          this.showToast(`Launching custom canary in Docker...`, 'info');
+
+          try {
+            const headers = { 'Content-Type': 'application/json' };
+            const token = this.operatorToken;
+            if (token) headers['X-Porygon-Operator-Token'] = token;
+
+            const res = await fetch(`${this.apiBase}/api/demo/run-custom`, {
+              method: 'POST',
+              headers,
+              body: JSON.stringify(this.customForm)
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success) {
+                this.logTerminal('EXEC', data.command, 'success');
+                if (data.output) this.logTerminal('OUTPUT', String(data.output).slice(0, 500), 'info');
+                if (data.incident_created) {
+                  this.logTerminal('INCIDENT', `Custom incident created: ${data.incident?.title}`, 'success');
+                }
+                this.showToast('Custom canary executed & incident recorded!', 'success');
+                await this.fetchIncidents();
+                this.activeTab = 'incidents';
+              } else {
+                this.logTerminal('ERROR', data.error || 'Custom execution failed', 'error');
+                this.showToast(data.error || 'Execution failed', 'danger');
+              }
+            } else {
+              this.showToast(`Server returned HTTP ${res.status}`, 'danger');
+            }
+          } catch (e) {
+            this.logTerminal('ERROR', `Error: ${e.message}`, 'error');
+            this.showToast(`Execution error: ${e.message}`, 'danger');
+          } finally {
+            this.isExecutingAttack = false;
+          }
+        },
+
+        // Save Custom Canary Card
+        async saveCustomCanary() {
+          if (!this.customForm.name.trim() || !this.customForm.command.trim()) {
+            this.showToast('Please provide both a canary name and attack command', 'warning');
+            return;
+          }
+
+          try {
+            const res = await fetch(`${this.apiBase}/api/custom-scenarios`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(this.customForm)
+            });
+
+            if (res.ok) {
+              this.showToast('Custom canary saved to cards list!', 'success');
+              await this.fetchCustomScenarios();
+            } else {
+              this.showToast('Failed to save custom canary', 'danger');
+            }
+          } catch (e) {
+            this.showToast(`Save error: ${e.message}`, 'danger');
+          }
+        },
+
+        // Trigger Saved Custom Scenario
+        async triggerCustomScenario(c) {
+          this.isExecutingAttack = true;
+          this.logTerminal('CUSTOM', `Triggering saved canary: ${c.name}...`, 'info');
+          this.showToast(`Running ${c.name}...`, 'info');
+
+          try {
+            const res = await fetch(`${this.apiBase}/api/demo/run-scenario`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ scenario_id: c.id })
+            });
+
+            if (res.ok) {
+              const data = await res.json();
+              if (data.success) {
+                this.logTerminal('EXEC', data.command || c.name, 'success');
+                if (data.output) this.logTerminal('OUTPUT', String(data.output).slice(0, 500), 'info');
+                this.showToast('Custom canary executed & incident updated!', 'success');
+                await this.fetchIncidents();
+              } else {
+                this.showToast(data.error || 'Execution failed', 'danger');
+              }
+            }
+          } catch (e) {
+            this.showToast(`Error: ${e.message}`, 'danger');
+          } finally {
+            this.isExecutingAttack = false;
+          }
+        },
+
+        async deleteCustomScenario(scenarioId) {
+          try {
+            const res = await fetch(`${this.apiBase}/api/custom-scenarios/${scenarioId}`, {
+              method: 'DELETE'
+            });
+            if (res.ok) {
+              this.showToast('Custom canary deleted', 'info');
+              await this.fetchCustomScenarios();
+            }
+          } catch (e) {
+            this.showToast('Failed to delete canary', 'danger');
+          }
+        },
+
+        // Incident Containment Responses
+        async respondToIncident(incidentId, action) {
+          this.showToast(`Applying action: ${action}...`, 'info');
+          try {
+            const res = await fetch(`${this.apiBase}/api/incidents/${incidentId}/respond`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action })
+            });
+            if (res.ok) {
+              const data = await res.json();
+              this.logTerminal('CONTAINMENT', `Applied ${action} to incident ${incidentId.slice(0, 8)}`, 'success');
+              this.showToast(`Action ${action} successfully applied!`, 'success');
+              await this.fetchIncidents();
+            } else {
+              this.showToast('Failed to apply mitigation action', 'danger');
+            }
+          } catch (e) {
+            this.showToast(`Action error: ${e.message}`, 'danger');
+          }
+        },
+
+        async clearAllIncidents() {
+          try {
+            const res = await fetch(`${this.apiBase}/api/incidents/clear`, { method: 'POST' });
+            if (res.ok) {
+              this.incidents = [];
+              this.showToast('Incident feed cleared', 'info');
+              this.logTerminal('SYSTEM', 'Local incident feed cleared.', 'info');
+            }
+          } catch (e) {}
+        },
+
+        openForensicModal(incident) {
+          this.forensicModal.incident = incident;
+          this.forensicModal.show = true;
+        },
+
+        // Settings Modal
+        openSettingsModal() {
+          this.settingsModal.apiBase = this.apiBase;
+          this.settingsModal.token = this.operatorToken === 'dev-operator-clearance' ? '' : this.operatorToken;
+          this.settingsModal.show = true;
+        },
+        saveSettings() {
+          const base = (this.settingsModal.apiBase || '').trim().replace(/\/$/, '');
+          if (base) {
+            this.apiBase = base;
+            localStorage.setItem('sim_api_base', base);
+          }
+          const token = (this.settingsModal.token || '').trim();
+          this.operatorToken = token || 'dev-operator-clearance';
+          this.settingsModal.show = false;
+          this.showToast('Settings saved successfully.', 'success');
+          this.logTerminal('CONFIG', `API base updated to: ${this.apiBase}`, 'info');
+          this.fetchStatus();
+          this.fetchIncidents();
+        }
+      };
+    }
+  </script>
+</body>
+</html>
